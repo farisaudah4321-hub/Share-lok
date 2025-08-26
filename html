@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>🔐 Pelacak Darurat - Cukup Klik & Bagikan</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode.js/lib/qrcode.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      color: #333;
+      min-height: 100vh;
+    }
+    .tab {
+      display: flex;
+      background: #1877f2;
+      overflow: hidden;
+    }
+    .tab button {
+      padding: 14px 20px;
+      font-size: 16px;
+      border: none;
+      background: #1877f2;
+      color: white;
+      cursor: pointer;
+      flex: 1;
+      transition: 0.3s;
+    }
+    .tab button:hover { background: #166fe5; }
+    .tab button.active { background: #fff; color: #1877f2; font-weight: bold; }
+    .tabcontent {
+      padding: 30px;
+      display: none;
+      max-width: 900px;
+      margin: 20px auto;
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    input, button {
+      padding: 12px;
+      margin: 10px 0;
+      width: 100%;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+    }
+    button.primary {
+      background: #1877f2; color: white; border: none; cursor: pointer; font-size: 16px;
+    }
+    button.success { background: #4CAF50; color: white; border: none; cursor: pointer; }
+    #qrcode { width: 256px; height: 256px; margin: 20px auto; border: 1px solid #ddd; border-radius: 8px; }
+    .info-box {
+      padding: 15px;
+      background: #f8f9fa;
+      border-radius: 8px;
+      margin: 15px 0;
+      font-size: 14px;
+      text-align: left;
+    }
+    @media print { .no-print, .tab { display: none !important; } }
+  </style>
+</head>
+<body>
+
+<div class="tab">
+  <button class="tablink active" onclick="openTab(event, 'Tracker')">📍 Pelacak</button>
+  <button class="tablink" onclick="openTab(event, 'QR')">📱 QR Code</button>
+</div>
+
+<!-- Tab 1: Pelacak Lokasi -->
+<div id="Tracker" class="tabcontent" style="display:block;">
+  <h2>🔐 Bagikan Lokasi Darurat</h2>
+  <p>Masukkan password untuk mulai berbagi lokasi secara real-time.</p>
+  
+  <input type="password" id="pwd" placeholder="Masukkan password" value="zhargensix" />
+
+  <button class="primary" onclick="verify()">🔓 Akses & Bagikan Lokasi</button>
+
+  <div id="status" class="info-box" style="display:none;"></div>
+  <button class="success" onclick="stop()" style="display:none;" id="stopBtn">🛑 Berhenti</button>
+
+  <div class="info-box">
+    <strong>💡 Cara Pakai:</strong><br>
+    1. Masukkan password: <strong>zhargensix</strong><br>
+    2. Izinkan akses lokasi<br>
+    3. Lokasi akan dikirim ke kontak darurat Anda via WhatsApp
+  </div>
+</div>
+
+<!-- Tab 2: QR Code Generator -->
+<div id="QR" class="tabcontent">
+  <h2>📱 QR Code Pelacakan</h2>
+  <p>Scan untuk langsung buka pelacak lokasi</p>
+  <div id="qrcode"></div>
+  <button class="primary" onclick="window.print()">🖨️ Cetak QR Code</button>
+  <div class="info-box">
+    Tempel QR code ini di dompet, gelang, atau kartu identitas.
+  </div>
+</div>
+
+<script>
+  // Ganti dengan nomor WhatsApp atau email kamu
+  const CONTACT = "6281234567890"; // Ganti dengan nomor WA kamu (format internasional)
+  const PASSWORD = "zhargensix";
+
+  function openTab(evt, tabName) {
+    const tabs = document.getElementsByClassName("tabcontent");
+    for (let i = 0; i < tabs.length; i++) tabs[i].style.display = "none";
+    const links = document.getElementsByClassName("tablink");
+    for (let i = 0; i < links.length; i++) links[i].classList.remove("active");
+    document.getElementById(tabName).style.display = "block";
+    evt.currentTarget.classList.add("active");
+  }
+
+  function verify() {
+    const input = document.getElementById("pwd").value;
+    if (input !== PASSWORD) {
+      alert("❌ Password salah! Gunakan: zhargensix");
+      return;
+    }
+
+    const status = document.getElementById("status");
+    status.style.display = "block";
+    status.innerHTML = "📍 Mengaktifkan GPS... (izinkan akses lokasi)";
+
+    if (!navigator.geolocation) {
+      status.innerHTML = "❌ Browser tidak mendukung geolocation.";
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(sendToWhatsApp, handleError, {
+      enableHighAccuracy: true,
+      timeout: 10000
+    });
+
+    navigator.geolocation.watchPosition(sendToWhatsApp, null, {
+      enableHighAccuracy: true,
+      maximumAge: 0,
+      timeout: 10000
+    });
+
+    document.getElementById("stopBtn").style.display = "block";
+  }
+
+  async function getBattery() {
+    if (navigator.getBattery) {
+      try {
+        const b = await navigator.getBattery();
+        return `${Math.round(b.level * 100)}%${b.charging ? ' 🔌' : ' 🔋'}`;
+      } catch (e) { return "Tidak diketahui"; }
+    }
+    return "Tidak didukung";
+  }
+
+  async function sendToWhatsApp(pos) {
+    const { latitude, longitude, accuracy, speed, timestamp } = pos.coords;
+    const time = new Date(timestamp).toLocaleString();
+    const battery = await getBattery();
+    const speedKmh = speed ? (speed * 3.6).toFixed(1) : 0;
+
+    const message = `
+🚨 *LOKASI DARURAT DIBAGIKAN* 🚨
+Lintang: ${latitude}
+Bujur: ${longitude}
+Akurasi: ±${accuracy} meter
+Kecepatan: ${speedKmh} km/jam
+Baterai: ${battery}
+Waktu: ${time}
+🌐 ${`https://maps.google.com/?q=${latitude},${longitude`}
+    `.trim();
+
+    // Kirim ke WhatsApp
+    const url = `https://wa.me/${CONTACT}?text=${encodeURIComponent(message)}`;
+    window.open(url, '_blank', 'width=600,height=800');
+
+    // Tampilkan info
+    document.getElementById("status").innerHTML = `
+      <strong>🟢 Lokasi dikirim ke WhatsApp!</strong><br>
+      Lintang: ${latitude}<br>
+      Bujur: ${longitude}<br>
+      Baterai: ${battery}<br>
+      Waktu: ${time}<br>
+      <a href="${`https://maps.google.com/?q=${latitude},${longitude`}" target="_blank">🌍 Buka di Google Maps</a>
+    `;
+  }
+
+  function handleError(err) {
+    let msg = "❌ Gagal: ";
+    switch(err.code) {
+      case err.PERMISSION_DENIED: msg += "Izin ditolak."; break;
+      case err.POSITION_UNAVAILABLE: msg += "Lokasi tidak tersedia."; break;
+      case err.TIMEOUT: msg += "Timeout."; break;
+      default: msg += err.message;
+    }
+    document.getElementById("status").innerHTML = msg;
+  }
+
+  function stop() {
+    alert("🛑 Berbagi lokasi dihentikan.");
+    window.close();
+  }
+
+  // QR Code
+  window.onload = () => {
+    new QRCode(document.getElementById("qrcode"), {
+      text: window.location.href,
+      width: 256,
+      height: 256,
+      colorDark: "#000",
+      colorLight: "#fff"
+    });
+  };
+</script>
+
+</body>
+</html>
